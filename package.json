@@ -1,17 +1,34 @@
 {
   "name": "telegram-agent",
   "version": "1.0.0",
+  "description": "Telegram bot with OpenAI integration",
   "main": "index.js",
-  "dependencies": {
-    "node-telegram-bot-api": "^0.61.0"
-  },
   "scripts": {
-    "start": "node index.js"
-  }
-}
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
+    "dotenv": "^16.3.1",
     "node-telegram-bot-api": "^0.61.0",
     "openai": "^4.8.0",
-    "dotenv": "^16.0.0"
-  }
+    "axios": "^1.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aiyoaora/telegram-agent.git"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "openai",
+    "railway"
+  ],
+  "author": "aiyoaora",
+  "license": "MIT"
 }
