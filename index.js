@@ -1,104 +1,70 @@
 require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs-extra');
 const axios = require('axios');
-const { Configuration, OpenAIApi } = require('openai');
+const TelegramBot = require('node-telegram-bot-api');
 
-// =====================
-// Setup Telegram
-// =====================
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+// ===== CONFIG =====
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const BLUESMIND_API_KEY = process.env.BLUESMIND_API_KEY;
+const BLUESMIND_ENDPOINT = process.env.BLUESMIND_ENDPOINT || 'https://api.bluesmind.ai/v1/chat';
+const MEMORY_FILE = './memory.json';
+const MAX_MEMORY = 50; // maksimal pesan tersimpan per user
 
-// =====================
-// Setup OpenAI
-// =====================
-const openai = new OpenAIApi(new Configuration({
-  apiKey: process.env.OPENAI_API_KEY
-}));
+// ===== INITIALIZE BOT =====
+const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
-// =====================
-// Memory sederhana
-// =====================
-const chatMemory = {}; // { chatId: [ { role, content } ] }
+// ===== LOAD MEMORY =====
+let memory = {};
+if (fs.existsSync(MEMORY_FILE)) {
+  try {
+    memory = fs.readJsonSync(MEMORY_FILE);
+  } catch (err) {
+    console.error('Failed to read memory file:', err);
+    memory = {};
+  }
+}
 
-// =====================
-// Fungsi untuk BlueSminds
-// =====================
-async function callBlueSminds(prompt) {
+// ===== HELPER FUNCTION =====
+async function getAIResponse(userId, message) {
+  let context = memory[userId] || [];
+  context.push({ role: 'user', content: message });
+
+  // Truncate memory jika melebihi MAX_MEMORY
+  if (context.length > MAX_MEMORY) {
+    context = context.slice(context.length - MAX_MEMORY);
+  }
+
   try {
     const response = await axios.post(
-      'https://api.bluesminds.com/v1/chat',
-      { model: "gpt-4.1-mini", prompt },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.BLUESMINDS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      }
+      BLUESMIND_ENDPOINT,
+      { messages: context },
+      { headers: { 'Authorization': `Bearer ${BLUESMIND_API_KEY}` } }
     );
-    return response.data.answer || "BlueSminds tidak memberikan jawaban.";
+
+    const reply = response.data?.reply || "Maaf, AI tidak merespons.";
+    
+    // Simpan pesan AI ke memory
+    context.push({ role: 'assistant', content: reply });
+    memory[userId] = context;
+    fs.writeJsonSync(MEMORY_FILE, memory, { spaces: 2 });
+
+    return reply;
   } catch (err) {
-    console.error('BlueSminds Error:', err.response?.data || err.message);
-    return "⚠️ Error saat memanggil BlueSminds.";
+    console.error('Error from BlueSminds API:', err.response?.data || err.message);
+    return "Terjadi error saat memproses permintaan AI.";
   }
 }
 
-// =====================
-// Fungsi untuk OpenAI
-// =====================
-async function callOpenAI(chatId, prompt) {
-  try {
-    if (!chatMemory[chatId]) chatMemory[chatId] = [];
-
-    chatMemory[chatId].push({ role: "user", content: prompt });
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: chatMemory[chatId]
-    });
-
-    const answer = completion.choices[0].message.content;
-    chatMemory[chatId].push({ role: "assistant", content: answer });
-
-    return answer;
-  } catch (err) {
-    console.error('OpenAI Error:', err.response?.data || err.message);
-
-    if (err.code === 'insufficient_quota' || err.status === 429) {
-      console.log('Fallback ke BlueSminds karena OpenAI quota habis');
-      return await callBlueSminds(prompt);
-    }
-
-    return "⚠️ Error saat memanggil OpenAI.";
-  }
-}
-
-// =====================
-// Telegram Commands
-// =====================
-bot.onText(/\/blue (.+)/, async (msg, match) => {
+// ===== BOT LISTENER =====
+bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
-  const prompt = match[1];
+  const text = msg.text;
 
-  bot.sendMessage(chatId, "🤖 Memproses lewat BlueSminds...");
-  const answer = await callBlueSminds(prompt);
-  bot.sendMessage(chatId, answer);
+  if (!text) return;
+
+  const reply = await getAIResponse(chatId, text);
+  bot.sendMessage(chatId, reply);
 });
 
-bot.onText(/\/openai (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const prompt = match[1];
-
-  bot.sendMessage(chatId, "🤖 Memproses lewat OpenAI...");
-  const answer = await callOpenAI(chatId, prompt);
-  bot.sendMessage(chatId, answer);
-});
-
-// =====================
-// Default response
-// =====================
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  if (!msg.text.startsWith('/blue') && !msg.text.startsWith('/openai')) {
-    bot.sendMessage(chatId, "Gunakan /blue <pertanyaan> atau /openai <pertanyaan>");
-  }
-});
+// ===== STARTUP LOG =====
+console.log('Telegram bot with persistent and auto-truncate memory is running...');
