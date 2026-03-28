@@ -1,19 +1,19 @@
 {
-  "name": "telegram-agent",
+  "name": "telegram-multi-model-bot",
   "version": "1.0.0",
+  "description": "Telegram bot with GPT-4.1-mini and LLaMA Instruct using one OpenAI API key",
   "main": "index.js",
-  "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
-    "openai": "^4.0.0"
-  },
   "scripts": {
     "start": "node index.js"
-  }
-}
-{
+  },
   "dependencies": {
+    "openai": "^4.3.1",
     "node-telegram-bot-api": "^0.61.0",
-    "openai": "^4.0.0",
-    "axios": "^1.6.0"
-  }
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "author": "",
+  "license": "MIT"
 }
