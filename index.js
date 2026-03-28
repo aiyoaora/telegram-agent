@@ -1,59 +1,53 @@
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-const OpenAI = require('openai');
-const axios = require('axios');
+const { Configuration, OpenAIApi } = require('openai');
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+// Ambil API key dari environment variable
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+const configuration = new Configuration({
+  apiKey: OPENAI_API_KEY,
 });
 
-async function askGroq(prompt) {
-  const res = await axios.post(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      model: "llama-3.1-8b-instruct",
-      messages: [
-        { role: "system", content: "You are an AI crypto automation agent." },
-        { role: "user", content: prompt }
-      ]
-    },
-    {
-      headers: {
-        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-  return res.data.choices[0].message.content;
-}
+const openai = new OpenAIApi(configuration);
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-async function askGPT(prompt) {
-  const res = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    messages: [{ role: "user", content: prompt }]
-  });
-  return res.choices[0].message.content;
-}
+// Start command
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "Halo! Gunakan /gpt atau /llama diikuti pertanyaanmu.");
+});
 
-bot.on('message', async (msg) => {
+// Command /gpt
+bot.onText(/\/gpt (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
-  const text = msg.text;
-
-  if (text === "/start") {
-    return bot.sendMessage(chatId, "🤖 Hybrid AI Agent aktif");
-  }
+  const prompt = match[1];
 
   try {
-    let reply = await askGroq(text);
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [{ role: "user", content: prompt }]
+    });
+    bot.sendMessage(chatId, response.choices[0].message.content);
+  } catch (error) {
+    console.error(error);
+    bot.sendMessage(chatId, "Terjadi error saat memanggil GPT-4.1-mini.");
+  }
+});
 
-    if (!reply || reply.length < 5) {
-      reply = await askGPT(text);
-    }
+// Command /llama
+bot.onText(/\/llama (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const prompt = match[1];
 
-    bot.sendMessage(chatId, reply);
-
-  } catch (e) {
-    bot.sendMessage(chatId, "error: " + e.message);
+  try {
+    const response = await openai.chat.completions.create({
+      model: "llama-instruct",
+      messages: [{ role: "user", content: prompt }]
+    });
+    bot.sendMessage(chatId, response.choices[0].message.content);
+  } catch (error) {
+    console.error(error);
+    bot.sendMessage(chatId, "Terjadi error saat memanggil LLaMA Instruct.");
   }
 });
